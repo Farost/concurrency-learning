@@ -3,6 +3,8 @@
 #include "tagged_semaphore.hpp"
 
 #include <deque>
+#include <optional>
+#include <iostream>
 
 // Bounded Blocking Multi-Producer/Multi-Consumer (MPMC) Queue
 
@@ -10,30 +12,87 @@ template <typename T>
 class BoundedBlockingQueue {
  public:
   explicit BoundedBlockingQueue(size_t capacity) 
-    : sem_(capacity)
-    , data_()
-  {}
+    : dataSem_(capacity)
+    , notEmptySem_(1)
+    , putSem_(1)
+    , takeSem_(1)
+  {
+    notEmptyToken_.emplace(notEmptySem_.Acquire());
+  }
 
   void Put(T value) 
   {
-    const auto token = sem_.Acquire();
-    data_.push_back(value, token);
+    auto token = dataSem_.Acquire();
+
+    auto putToken(putSem_.Acquire());
+
+    data_.emplace_back(std::move(value));
+    dataTokens_.emplace_back(std::move(token));
+
+    if (notEmptyToken_.has_value())
+    {
+      auto notEmptyToken = std::move(*notEmptyToken_);
+      notEmptyToken_ = std::nullopt;
+      notEmptySem_.Release(std::move(notEmptyToken));
+    }
+
+    putSem_.Release(std::move(putToken));
   }
 
   T Take() 
   {
-    const auto& [val, token] = data_.front();
-    sem_.Release(token);
+    auto takeToken(takeSem_.Acquire());
+
+    WaitForData();
+
+    auto token = std::move(dataTokens_.front());
+    dataTokens_.pop_front();
+    
+    auto d = std::move(data_.front());
     data_.pop_front();
-    return val;
+
+    dataSem_.Release(std::move(token));
+
+    takeSem_.Release(std::move(takeToken));
+
+    return d;
+  }
+
+ private:
+
+  void WaitForData()
+  {
+    if (!data_.empty())
+    {
+      return;
+    }
+
+    auto token = notEmptySem_.Acquire();
+    notEmptyToken_.emplace(std::move(token));
   }
 
  private:
   // Tags
-  struct SomeTag {};
+  struct DataTag{};
+  struct EmptyTag{};
+  struct PutTag{};
+  struct TakeTag{};
+
+  using DataSemaphore = TaggedSemaphore<DataTag>;
+  using NotEmptySemaphore = TaggedSemaphore<EmptyTag>;
+  using PutSemaphore = TaggedSemaphore<PutTag>;
+  using TakeSemaphore = TaggedSemaphore<TakeTag>;
 
  private:
   // Buffer
-  TaggedSemaphore<SomeTag> sem_;
-  std::deque<std::pair<T, typename TaggedSemaphore<SomeTag>::Token>> data_;
+  std::deque<T> data_;
+
+  DataSemaphore dataSem_;
+  std::deque<typename DataSemaphore::Token> dataTokens_;
+
+  NotEmptySemaphore notEmptySem_;
+  std::optional<typename NotEmptySemaphore::Token> notEmptyToken_;
+
+  PutSemaphore putSem_;
+  TakeSemaphore takeSem_;
 };
