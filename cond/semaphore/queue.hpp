@@ -11,88 +11,55 @@
 template <typename T>
 class BoundedBlockingQueue {
  public:
-  explicit BoundedBlockingQueue(size_t capacity) 
-    : dataSem_(capacity)
-    , notEmptySem_(1)
-    , putSem_(1)
-    , takeSem_(1)
+  explicit BoundedBlockingQueue(size_t capacity)
+      : capacity_(capacity)
+      , buffer_()
+      , emptySlots_(capacity)
+      , filledSlots_(0)
+      , bufferMutex_(1)
   {
-    notEmptyToken_.emplace(notEmptySem_.Acquire());
   }
 
-  void Put(T value) 
+  void Put(T value)
   {
-    auto token = dataSem_.Acquire();
+    DataToken emptySlotToken = emptySlots_.Acquire();
+    MutexToken mutexToken = bufferMutex_.Acquire();
 
-    auto putToken(putSem_.Acquire());
+    buffer_.emplace_back(std::move(value));
 
-    data_.emplace_back(std::move(value));
-    dataTokens_.emplace_back(std::move(token));
-
-    if (notEmptyToken_.has_value())
-    {
-      auto notEmptyToken = std::move(*notEmptyToken_);
-      notEmptyToken_ = std::nullopt;
-      notEmptySem_.Release(std::move(notEmptyToken));
-    }
-
-    putSem_.Release(std::move(putToken));
+    filledSlots_.Release(std::move(emptySlotToken));
+    bufferMutex_.Release(std::move(mutexToken));
   }
 
-  T Take() 
+  T Take()
   {
-    auto takeToken(takeSem_.Acquire());
+    DataToken filledSlotToken = filledSlots_.Acquire();
+    MutexToken mutexToken = bufferMutex_.Acquire();
 
-    WaitForData();
+    assert(!buffer_.empty());
 
-    auto token = std::move(dataTokens_.front());
-    dataTokens_.pop_front();
-    
-    auto d = std::move(data_.front());
-    data_.pop_front();
+    T data = std::move(buffer_.front());
+    buffer_.pop_front();
 
-    dataSem_.Release(std::move(token));
+    emptySlots_.Release(std::move(filledSlotToken));
+    bufferMutex_.Release(std::move(mutexToken));
 
-    takeSem_.Release(std::move(takeToken));
-
-    return d;
+    return std::move(data);
   }
 
  private:
+  struct DataTag {};
+  struct MutexTag {};
 
-  void WaitForData()
-  {
-    if (!data_.empty())
-    {
-      return;
-    }
-
-    auto token = notEmptySem_.Acquire();
-    notEmptyToken_.emplace(std::move(token));
-  }
+  using DataToken = typename TaggedSemaphore<DataTag>::Token;
+  using MutexToken = typename TaggedSemaphore<MutexTag>::Token; 
 
  private:
-  // Tags
-  struct DataTag{};
-  struct EmptyTag{};
-  struct PutTag{};
-  struct TakeTag{};
+  size_t capacity_{0};
+  std::deque<T> buffer_;
 
-  using DataSemaphore = TaggedSemaphore<DataTag>;
-  using NotEmptySemaphore = TaggedSemaphore<EmptyTag>;
-  using PutSemaphore = TaggedSemaphore<PutTag>;
-  using TakeSemaphore = TaggedSemaphore<TakeTag>;
+  TaggedSemaphore<DataTag> emptySlots_;
+  TaggedSemaphore<DataTag> filledSlots_;
 
- private:
-  // Buffer
-  std::deque<T> data_;
-
-  DataSemaphore dataSem_;
-  std::deque<typename DataSemaphore::Token> dataTokens_;
-
-  NotEmptySemaphore notEmptySem_;
-  std::optional<typename NotEmptySemaphore::Token> notEmptyToken_;
-
-  PutSemaphore putSem_;
-  TakeSemaphore takeSem_;
+  TaggedSemaphore<MutexTag> bufferMutex_;
 };
