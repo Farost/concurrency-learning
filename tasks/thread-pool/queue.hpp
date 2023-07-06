@@ -13,7 +13,8 @@ namespace tp {
 template <typename T>
 class UnboundedBlockingQueue {
  public:
-  bool Put(T task) {
+  bool Put(T task) 
+  {
     std::unique_lock<twist::ed::stdlike::mutex> lock(mutex_);
 
     if (!working_)
@@ -27,7 +28,8 @@ class UnboundedBlockingQueue {
     return true;
   }
 
-  std::optional<T> Take() {
+  std::optional<T> Take() 
+  {
     std::unique_lock<twist::ed::stdlike::mutex> lock(mutex_);
    
     while (data_.empty())
@@ -46,7 +48,8 @@ class UnboundedBlockingQueue {
     return task;
   }
 
-  void Close() {
+  void Close() 
+  {
     std::unique_lock<twist::ed::stdlike::mutex> lock(mutex_);
 
     working_ = false;
