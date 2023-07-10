@@ -30,8 +30,8 @@ class Coroutine : sure::ITrampoline
  private:
   static Coroutine* currentCoroutine;
 
-  sure::ExecutionContext context;
-  sure::ExecutionContext outerContext;
+  sure::ExecutionContext context_;
+  sure::ExecutionContext outerContext_;
 
   Routine routine_;
   sure::Stack stack_;

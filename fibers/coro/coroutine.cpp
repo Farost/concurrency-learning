@@ -16,7 +16,7 @@ Coroutine::Coroutine(Routine routine)
   , exception_()
   , completed_(false)
 {
-  context.Setup(stack_.MutView(), this);
+  context_.Setup(stack_.MutView(), this);
 }
 
 void Coroutine::Resume() 
@@ -28,7 +28,7 @@ void Coroutine::Resume()
 
   Coroutine* callerCoroutine = std::exchange(currentCoroutine, this);
 
-  outerContext.SwitchTo(context);
+  outerContext_.SwitchTo(context_);
 
   currentCoroutine = callerCoroutine;
 
@@ -60,10 +60,10 @@ void Coroutine::Run() noexcept
   }
 
   completed_ = true;
-  context.ExitTo(outerContext);
+  context_.ExitTo(outerContext_);
 }
 
 void Coroutine::SuspendInternal() 
 {
-  context.SwitchTo(outerContext);
+  context_.SwitchTo(outerContext_);
 }
