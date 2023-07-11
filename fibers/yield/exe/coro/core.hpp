@@ -28,7 +28,7 @@ class Coroutine : sure::ITrampoline
   void SuspendInternal(); 
 
  private:
-  static Coroutine* currentCoroutine;
+  static thread_local Coroutine* currentCoroutine;
 
   sure::ExecutionContext context_;
   sure::ExecutionContext outerContext_;

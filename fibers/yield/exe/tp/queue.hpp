@@ -31,7 +31,7 @@ class UnboundedBlockingQueue {
   std::optional<T> Take() 
   {
     std::unique_lock<twist::ed::stdlike::mutex> lock(mutex_);
-   
+
     while (data_.empty())
     {
       if (!working_)

@@ -2,8 +2,6 @@
 
 #include <twist/ed/local/ptr.hpp>
 
-#include <iostream>
-
 namespace exe::fibers {
 
 twist::ed::ThreadLocalPtr<Fiber> Fiber::currentFiber = nullptr;
@@ -17,7 +15,6 @@ Fiber::Fiber(tp::ThreadPool& threadPool, Routine routine)
 
 void Fiber::Schedule() 
 {
-  ////std::cout << "Schedule!" << this << std::endl;
   if (threadPool_ == nullptr)
   {
     Run();
@@ -33,18 +30,20 @@ void Fiber::Schedule()
 
 void Fiber::Run() 
 {
-  //std::cout << "Run!" << this << std::endl;
   currentFiber = this;
 
-  coroutine_.Resume();
-
+  if (!coroutine_.IsCompleted())
+  {
+    coroutine_.Resume();
+  }
+  
   currentFiber = nullptr;
 
   if (coroutine_.IsCompleted())
   {
     Destroy();
   }
-  else 
+  else
   {
     Schedule();
   }
@@ -52,12 +51,7 @@ void Fiber::Run()
 
 void Fiber::Suspend()
 {
-  //std::cout << "Suspend!" << this << std::endl;
-  //if (!coroutine_.IsCompleted())
-  //{
-    coro::Coroutine::Suspend();
-  //}
-  
+  coro::Coroutine::Suspend();
 }
 
 Fiber* Fiber::Self() 
@@ -67,7 +61,6 @@ Fiber* Fiber::Self()
 
 void Fiber::Destroy()
 {
-  //std::cout << "Destroy!" << this << std::endl;
   delete this;
 }
 

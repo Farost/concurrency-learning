@@ -7,7 +7,7 @@
 
 namespace exe::coro {
 
-Coroutine* Coroutine::currentCoroutine = nullptr;
+thread_local Coroutine* Coroutine::currentCoroutine = nullptr;
 
 static const size_t kDefaultStackSize = 64'000'000;
 
@@ -41,7 +41,14 @@ void Coroutine::Resume()
 
 void Coroutine::Suspend() 
 {
-  currentCoroutine->SuspendInternal();
+  if (currentCoroutine != nullptr)
+  {
+    currentCoroutine->SuspendInternal();
+  }
+  else
+  {
+    throw std::runtime_error("Not in a coroutine");
+  }
 }
 
 bool Coroutine::IsCompleted() const 

@@ -1,6 +1,7 @@
 #include <exe/fibers/sched/yield.hpp>
 #include <exe/fibers/core/fiber.hpp>
 
+#include <iostream>
 
 namespace exe::fibers {
 
@@ -10,7 +11,6 @@ void Yield()
 
   if (fiber != nullptr)
   {
-    //fiber->Schedule();
     fiber->Suspend();
   }
   else 
