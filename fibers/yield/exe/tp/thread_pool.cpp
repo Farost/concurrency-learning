@@ -4,6 +4,8 @@
 
 #include <wheels/core/panic.hpp>
 
+#include <iostream>
+
 namespace exe::tp {
 
 twist::ed::ThreadLocalPtr<ThreadPool> ThreadPool::currentPool_ = nullptr;
@@ -90,6 +92,7 @@ void ThreadPool::IncrementActiveTasks()
   std::lock_guard<twist::ed::stdlike::mutex> lock(mutex_);
 
   ++activeTaskCount_;
+  //std::cout << "current tasks: " << activeTaskCount_ << std::endl;
 }
 
 void ThreadPool::DecrementActiveTasks() 
