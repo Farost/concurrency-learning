@@ -13,7 +13,7 @@ void Yield()
   }
   else 
   {
-    throw std::runtime_error("Not in a fiber");
+    throw std::runtime_error("Yield not in a fiber");
   }
 }
 
