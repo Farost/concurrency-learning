@@ -11,8 +11,16 @@ void Go(Scheduler& scheduler, Routine routine)
 
 void Go(Routine routine) 
 {
-  Scheduler* scheduler = Fiber::GetSelfScheduler();
-  Go(*scheduler, std::move(routine));
+  Scheduler* scheduler = Scheduler::Current();
+  
+  if (scheduler != nullptr)
+  {
+    Go(*scheduler, std::move(routine));
+  }
+  else 
+  {
+    throw std::runtime_error("No scheduler available");
+  }
 }
 
 }  // namespace exe::fibers

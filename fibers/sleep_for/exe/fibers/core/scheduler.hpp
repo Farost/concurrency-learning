@@ -1,9 +1,9 @@
 #pragma once
 
-#include <asio/io_context.hpp>
+#include <exe/tp/thread_pool.hpp>
 
 namespace exe::fibers {
 
-using Scheduler = asio::io_context;
+using Scheduler = tp::ThreadPool;
 
 }  // namespace exe::fibers
