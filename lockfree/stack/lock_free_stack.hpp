@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include <cassert>
 #include <iostream>
 
 // Treiber unbounded lock-free stack
@@ -33,47 +34,66 @@ class LockFreeStack
 
   void Push(T item) 
   {
-    std::cout << "push" << std::endl;
-    StampedPtr<Node> newHead{new Node(std::move(item)), 1};
-    newHead.raw_ptr->innerCount.fetch_add(1);
+    StampedPtr<Node> newHead{new Node(std::move(item)), 0};
+
     newHead->next = top_.Load();
 
     while (!top_.CompareExchangeWeak(newHead->next, newHead))
     {}
-    
-    std::cout << "PUSH: oldTop.stamp = " << top_.Load().stamp << " innerCount: " << top_.Load().raw_ptr->innerCount << std::endl;
-        
-    std::cout << "push successful" << std::endl;
   }
 
-  std::optional<T> TryPop(bool unconditionally = false) 
+  std::optional<T> TryPop() 
   {
-    std::cout << "pop" << std::endl;
-    StampedPtr<Node> oldTop = top_.Load();
-
-    while (oldTop)
+    while (true)
     {
-      auto innerCount = oldTop.raw_ptr->innerCount.load();
-      std::cout << "real old top" << std::endl;
-      StampedPtr<Node> newTop = oldTop.raw_ptr->next.IncrementStamp();
+      StampedPtr<Node> oldTop;
 
-      if (top_.CompareExchangeWeak(oldTop, newTop)) 
+      while (!top_.CompareExchangeWeak(oldTop, oldTop.IncrementStamp()))
+      {} // 1, 2
+
+      if (!oldTop)
       {
-        T value = std::move(oldTop.raw_ptr->value);
-        //oldTop.raw_ptr->innerCount.fetch_add(1);
+        return std::nullopt;
+      }
 
-        std::cout << "POP: oldTop.stamp = " << oldTop.stamp << " innerCount: " << oldTop.raw_ptr->innerCount << std::endl;
-        if (unconditionally || oldTop.stamp == innerCount) 
+      oldTop = oldTop.IncrementStamp(); // 1, 2
+
+      if (top_.CompareExchangeWeak(oldTop, oldTop.raw_ptr->next)) // 1, 2
+      {
+        assert(oldTop);
+        
+        T value = std::move(oldTop.raw_ptr->value);
+        while (true)
+        {
+          auto innerCount = oldTop.raw_ptr->innerCount.load();
+          if (oldTop.raw_ptr->innerCount.compare_exchange_weak(innerCount, innerCount + 1))
+          {
+            break;
+          }
+        }
+
+        assert(oldTop);
+
+        uint64_t innerCount = oldTop.raw_ptr->innerCount.fetch_add(1);
+        
+        if (oldTop.stamp == innerCount)
         {
           delete oldTop.raw_ptr;
         }
-      std::cout << "pop successful" << std::endl;
+
         return value;
       }
-      std::cout << "another pop try" << std::endl;
+      
+      assert(oldTop);
+      uint64_t innerCount = oldTop.raw_ptr->innerCount.fetch_add(1);
+      
+      assert(oldTop.stamp >= innerCount);
+      
+      if (oldTop.stamp == innerCount)
+      {
+        delete oldTop.raw_ptr;
+      }
     }
-
-    return std::nullopt;
   }
 
   ~LockFreeStack() 
@@ -86,18 +106,6 @@ class LockFreeStack
       delete oldTop.raw_ptr;
       oldTop = newTop;
     }
-  }
-
-private:
-
-  StampedPtr<Node> LoadTop()
-  {
-    auto currentTop = top_.Load();
-    while (!top_.CompareExchangeWeak(currentTop, currentTop.IncrementStamp()))
-    {
-    }
-
-    return currentTop.IncrementStamp();
   }
 
  private:
