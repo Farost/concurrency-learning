@@ -4,10 +4,8 @@
 
 #include <twist/ed/stdlike/atomic.hpp>
 
-#include <optional>
-
 #include <cassert>
-#include <iostream>
+#include <optional>
 
 // Treiber unbounded lock-free stack
 // https://en.wikipedia.org/wiki/Treiber_stack
@@ -25,7 +23,7 @@ class LockFreeStack
 
     T value;
     StampedPtr<Node> next;
-    twist::ed::stdlike::atomic<uint64_t> innerCount{0};
+    twist::ed::stdlike::atomic<int64_t> innerCount{0};
   };
 
  public:
@@ -46,50 +44,36 @@ class LockFreeStack
   {
     while (true)
     {
-      StampedPtr<Node> oldTop;
+      StampedPtr<Node> curTop;
 
-      while (!top_.CompareExchangeWeak(oldTop, oldTop.IncrementStamp()))
-      {} // 1, 2
+      while (!top_.CompareExchangeWeak(curTop, curTop.IncrementStamp()))
+      {} 
 
-      if (!oldTop)
+      if (!curTop)
       {
         return std::nullopt;
       }
 
-      oldTop = oldTop.IncrementStamp(); // 1, 2
+      curTop = curTop.IncrementStamp();
+      auto oldTop = curTop;
 
-      if (top_.CompareExchangeWeak(oldTop, oldTop.raw_ptr->next)) // 1, 2
+      if (top_.CompareExchangeWeak(curTop, curTop.raw_ptr->next))
       {
-        assert(oldTop);
+        assert(curTop);
         
-        T value = std::move(oldTop.raw_ptr->value);
-        while (true)
-        {
-          auto innerCount = oldTop.raw_ptr->innerCount.load();
-          if (oldTop.raw_ptr->innerCount.compare_exchange_weak(innerCount, innerCount + 1))
-          {
-            break;
-          }
-        }
+        T value = std::move(curTop.raw_ptr->value);
 
-        assert(oldTop);
+        const int64_t stampIncrement = curTop.stamp - 1;
 
-        uint64_t innerCount = oldTop.raw_ptr->innerCount.fetch_add(1);
-        
-        if (oldTop.stamp == innerCount)
+        if (curTop.raw_ptr->innerCount.fetch_add(stampIncrement) == -stampIncrement)
         {
-          delete oldTop.raw_ptr;
+          delete curTop.raw_ptr;
         }
 
         return value;
       }
-      
-      assert(oldTop);
-      uint64_t innerCount = oldTop.raw_ptr->innerCount.fetch_add(1);
-      
-      assert(oldTop.stamp >= innerCount);
-      
-      if (oldTop.stamp == innerCount)
+
+      if (oldTop.raw_ptr->innerCount.fetch_sub(1) == 1)
       {
         delete oldTop.raw_ptr;
       }
@@ -98,13 +82,13 @@ class LockFreeStack
 
   ~LockFreeStack() 
   {
-    std::cout << "Destructor" << std::endl;
-    StampedPtr<Node> oldTop = top_.Load();
-    while (oldTop)
+    StampedPtr<Node> curTop = top_.Load();
+    
+    while (curTop)
     {
-      StampedPtr<Node> newTop = oldTop.raw_ptr->next;
-      delete oldTop.raw_ptr;
-      oldTop = newTop;
+      StampedPtr<Node> newTop = curTop.raw_ptr->next;
+      delete curTop.raw_ptr;
+      curTop = newTop;
     }
   }
 
